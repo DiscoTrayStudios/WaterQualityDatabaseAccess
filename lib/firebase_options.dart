@@ -61,4 +61,5 @@ class DefaultFirebaseOptions {
     databaseURL: 'https://waterqualityapp-ef1f6-default-rtdb.firebaseio.com',
     storageBucket: 'waterqualityapp-ef1f6.appspot.com',
   );
+
 }

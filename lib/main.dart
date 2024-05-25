@@ -1,11 +1,34 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:csv/csv.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:water_quality_database_access/firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    final userCredential = await FirebaseAuth.instance.signInAnonymously();
+    debugPrint("Signed in with temp account");
+    debugPrint(userCredential.user!.uid); //user id for anonymous account
+  } on FirebaseAuthException catch (e) {
+    switch (e.code) {
+      case "operation-not-allowed":
+        debugPrint("Anonymous auth hasn't been enabled for this project.");
+        break;
+      default:
+        debugPrint("Unknown error.");
+        debugPrint(e.code);
+    }
+  }
   runApp(const MyApp());
 }
 
@@ -62,7 +85,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
 
   bool downloading = false;
-  File? csv;
+  Uint8List? csv;
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +134,7 @@ class _MyHomePageState extends State<MyHomePage> {
             TextButton(onPressed: (() {
               csv == null
                 ? debugPrint("Failed")
-                : launchUrl(Uri.parse("data:application/octet-stream;base64,${base64Encode(csv!.readAsBytesSync())}"));
+                : launchUrl(Uri.parse("data:text/csv;base64,${base64Encode(csv!)}"));
               }), child: const Text("Download")),
           ],
         ),
@@ -119,5 +142,67 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
   
-  downloadCSV() async {await Future.delayed(const Duration(seconds: 2), (){});}
+  Future<Uint8List> downloadCSV() async {
+    CollectionReference ref = FirebaseFirestore.instance.collection("testInstances");
+    
+    QuerySnapshot eventsQuery = await ref.get();
+
+    List<List<dynamic>> data = List.empty(growable: true);
+
+    List<dynamic> row = [];
+    row.add("ID");
+    row.add("Longitude");
+    row.add("Latitude");
+    row.add("DateTime");
+    row.add("WaterType");
+    row.add("pH");
+    row.add("Hardness");
+    row.add("HydrogenSulfide");
+    row.add("Iron");
+    row.add("Copper");
+    row.add("Lead");
+    row.add("Manganese");
+    row.add("TotalChlorine");
+    row.add("Mercury");
+    row.add("Nitrate");
+    row.add("Nitrite");
+    row.add("Sulfate");
+    row.add("Zinc");
+    row.add("Flouride");
+    row.add("SodiumChloride");
+    row.add("TotalAlkalinity");
+    row.add("ImageLink");
+    data.add(row);
+
+    int count = 0;
+
+    for (var document in eventsQuery.docs) {
+      List<dynamic> row = [];
+      row.add(count);
+      count++;
+      row.add(document["longitude"]);
+      row.add(DateFormat('yyyy/MM/dd HH:mm:ss').format(DateTime.fromMicrosecondsSinceEpoch(document["timestamp"])).toString());
+      row.add(document["Water Type"]);
+      row.add(document["pH"]);
+      row.add(document["Hardness"]);
+      row.add(document["HydrogenSulfide"]);
+      row.add(document["Iron"]);
+      row.add(document["Copper"]);
+      row.add(document["Lead"]);
+      row.add(document["Manganese"]);
+      row.add(document["TotalChlorine"]);
+      row.add(document["Mercury"]);
+      row.add(document["Nitrate"]);
+      row.add(document["Nitrite"]);
+      row.add(document["Sulfate"]);
+      row.add(document["Zinc"]);
+      row.add(document["Flouride"]);
+      row.add(document["SodiumChloride"]);
+      row.add(document["TotalAlkalinity"]);
+      row.add(document["image"]);
+      data.add(row);
+    }
+
+    return Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(data)));
+  }
 }
