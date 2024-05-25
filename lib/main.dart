@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(const MyApp());
@@ -11,7 +16,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Database Access',
       theme: ThemeData(
         // This is the theme of your application.
         //
@@ -55,18 +60,9 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  bool downloading = false;
+  File? csv;
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +85,9 @@ class _MyHomePageState extends State<MyHomePage> {
       body: Center(
         // Center is a layout widget. It takes a single child and positions it
         // in the middle of the parent.
-        child: Column(
+        child: downloading
+              ? SpinKitChasingDots(color: Theme.of(context).colorScheme.primary, size: 50.0,)
+              : Column(
           // Column is also a layout widget. It takes a list of children and
           // arranges them vertically. By default, it sizes itself to fit its
           // children horizontally, and tries to be as tall as its parent.
@@ -105,21 +103,21 @@ class _MyHomePageState extends State<MyHomePage> {
           // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
+            TextButton(onPressed: (() async {
+              setState(() {downloading = true;});
+              csv = await downloadCSV();
+              setState(() {downloading = false;});
+            }), child: const Text("Generate CSV")),
+            TextButton(onPressed: (() {
+              csv == null
+                ? debugPrint("Failed")
+                : launchUrl(Uri.parse("data:application/octet-stream;base64,${base64Encode(csv!.readAsBytesSync())}"));
+              }), child: const Text("Download")),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
+  
+  downloadCSV() async {await Future.delayed(const Duration(seconds: 2), (){});}
 }
