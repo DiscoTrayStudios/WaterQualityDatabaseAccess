@@ -59,7 +59,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Water Quality Download'),
     );
   }
 }
@@ -83,7 +83,6 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-
   bool downloading = false;
   Uint8List? csv;
 
@@ -109,42 +108,55 @@ class _MyHomePageState extends State<MyHomePage> {
         // Center is a layout widget. It takes a single child and positions it
         // in the middle of the parent.
         child: downloading
-              ? SpinKitChasingDots(color: Theme.of(context).colorScheme.primary, size: 50.0,)
-              : Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            TextButton(onPressed: (() async {
-              setState(() {downloading = true;});
-              csv = await downloadCSV();
-              setState(() {downloading = false;});
-            }), child: const Text("Generate CSV")),
-            TextButton(onPressed: (() {
-              csv == null
-                ? debugPrint("Failed")
-                : launchUrl(Uri.parse("data:text/csv;base64,${base64Encode(csv!)}"));
-              }), child: const Text("Download")),
-          ],
-        ),
+            ? SpinKitChasingDots(
+                color: Theme.of(context).colorScheme.primary,
+                size: 50.0,
+              )
+            : Column(
+                // Column is also a layout widget. It takes a list of children and
+                // arranges them vertically. By default, it sizes itself to fit its
+                // children horizontally, and tries to be as tall as its parent.
+                //
+                // Column has various properties to control how it sizes itself and
+                // how it positions its children. Here we use mainAxisAlignment to
+                // center the children vertically; the main axis here is the vertical
+                // axis because Columns are vertical (the cross axis would be
+                // horizontal).
+                //
+                // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
+                // action in the IDE, or press "p" in the console), to see the
+                // wireframe for each widget.
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  TextButton(
+                      onPressed: (() async {
+                        setState(() {
+                          downloading = true;
+                        });
+                        csv = await downloadCSV();
+                        setState(() {
+                          downloading = false;
+                        });
+                      }),
+                      child: const Text("Generate CSV")),
+                  TextButton(
+                      onPressed: (() {
+                        csv == null
+                            ? debugPrint("Failed")
+                            : launchUrl(Uri.parse(
+                                "data:text/csv;base64,${base64Encode(csv!)}"));
+                      }),
+                      child: const Text("Download")),
+                ],
+              ),
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
-  
+
   Future<Uint8List> downloadCSV() async {
-    CollectionReference ref = FirebaseFirestore.instance.collection("testInstances");
-    
+    CollectionReference ref =
+        FirebaseFirestore.instance.collection("testInstances");
+
     QuerySnapshot eventsQuery = await ref.get();
 
     List<List<dynamic>> data = List.empty(growable: true);
@@ -155,6 +167,7 @@ class _MyHomePageState extends State<MyHomePage> {
     row.add("Latitude");
     row.add("DateTime");
     row.add("WaterType");
+    row.add("WaterInfo");
     row.add("pH");
     row.add("Hardness");
     row.add("HydrogenSulfide");
@@ -182,8 +195,13 @@ class _MyHomePageState extends State<MyHomePage> {
       count++;
       row.add(document["longitude"]);
       row.add(document["latitude"]);
-      row.add(DateFormat('yyyy/MM/dd HH:mm:ss').format(DateTime.fromMicrosecondsSinceEpoch(document["timestamp"])).toString());
+      row.add(DateFormat('yyyy/MM/dd HH:mm:ss')
+          .format(DateTime.fromMicrosecondsSinceEpoch(document["timestamp"]))
+          .toString());
       row.add(document["Water Type"]);
+      (document.data() as Map<String, dynamic>).containsKey('Water Info')
+          ? row.add("Info: " + document["Water Info"])
+          : row.add("None");
       row.add(document["pH"]);
       row.add(document["Hardness"]);
       row.add(document["Hydrogen Sulfide"]);
@@ -204,6 +222,7 @@ class _MyHomePageState extends State<MyHomePage> {
       data.add(row);
     }
 
-    return Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(data)));
+    return Uint8List.fromList(
+        utf8.encode(const ListToCsvConverter().convert(data)));
   }
 }
