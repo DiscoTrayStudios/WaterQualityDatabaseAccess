@@ -84,7 +84,14 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   bool downloading = false;
-  Uint8List? csv;
+  late Future<Uint8List> csv;
+
+  @override
+  void initState() {
+    super.initState();
+
+    csv = downloadCSV();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,62 +102,43 @@ class _MyHomePageState extends State<MyHomePage> {
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: downloading
-            ? SpinKitChasingDots(
-                color: Theme.of(context).colorScheme.primary,
-                size: 50.0,
-              )
-            : Column(
-                // Column is also a layout widget. It takes a list of children and
-                // arranges them vertically. By default, it sizes itself to fit its
-                // children horizontally, and tries to be as tall as its parent.
-                //
-                // Column has various properties to control how it sizes itself and
-                // how it positions its children. Here we use mainAxisAlignment to
-                // center the children vertically; the main axis here is the vertical
-                // axis because Columns are vertical (the cross axis would be
-                // horizontal).
-                //
-                // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-                // action in the IDE, or press "p" in the console), to see the
-                // wireframe for each widget.
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  TextButton(
-                      onPressed: (() async {
-                        setState(() {
-                          downloading = true;
-                        });
-                        csv = await downloadCSV();
-                        setState(() {
-                          downloading = false;
-                        });
-                      }),
-                      child: const Text("Generate CSV")),
-                  TextButton(
-                      onPressed: (() {
-                        csv == null
-                            ? debugPrint("Failed")
-                            : launchUrl(Uri.parse(
-                                "data:text/csv;base64,${base64Encode(csv!)}"));
-                      }),
-                      child: const Text("Download")),
-                ],
-              ),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
+        appBar: AppBar(
+          // TRY THIS: Try changing the color here to a specific color (to
+          // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
+          // change color while the other colors stay the same.
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          // Here we take the value from the MyHomePage object that was created by
+          // the App.build method, and use it to set our appbar title.
+          title: Text(widget.title),
+        ),
+        body: Center(
+            // Center is a layout widget. It takes a single child and positions it
+            // in the middle of the parent.
+            child: FutureBuilder(
+                future: csv,
+                builder:
+                    (BuildContext context, AsyncSnapshot<Uint8List> snapshot) {
+                  switch (snapshot.connectionState) {
+                    case ConnectionState.none:
+                    case ConnectionState.waiting:
+                      return SpinKitChasingDots(
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 50.0,
+                      );
+                    case ConnectionState.active:
+                    case ConnectionState.done:
+                      if (snapshot.hasError) {
+                        return const Text("Error!");
+                      } else {
+                        return TextButton(
+                            onPressed: (() {
+                              launchUrl(Uri.parse(
+                                  "data:text/csv;base64,${base64Encode(snapshot.data!)}"));
+                            }),
+                            child: const Text("Download"));
+                      }
+                  }
+                })));
   }
 
   Future<Uint8List> downloadCSV() async {
@@ -168,6 +156,7 @@ class _MyHomePageState extends State<MyHomePage> {
     row.add("DateTime");
     row.add("WaterType");
     row.add("WaterInfo");
+    row.add("Notes");
     row.add("pH");
     row.add("Hardness");
     row.add("HydrogenSulfide");
@@ -201,6 +190,9 @@ class _MyHomePageState extends State<MyHomePage> {
       row.add(document["Water Type"]);
       (document.data() as Map<String, dynamic>).containsKey('Water Info')
           ? row.add("Info: " + document["Water Info"])
+          : row.add("None");
+      (document.data() as Map<String, dynamic>).containsKey('Notes')
+          ? row.add("Info: " + document["Notes"])
           : row.add("None");
       row.add(document["pH"]);
       row.add(document["Hardness"]);
