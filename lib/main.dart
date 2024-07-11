@@ -1,11 +1,34 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:csv/csv.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:water_quality_database_access/firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    final userCredential = await FirebaseAuth.instance.signInAnonymously();
+    debugPrint("Signed in with temp account");
+    debugPrint(userCredential.user!.uid); //user id for anonymous account
+  } on FirebaseAuthException catch (e) {
+    switch (e.code) {
+      case "operation-not-allowed":
+        debugPrint("Anonymous auth hasn't been enabled for this project.");
+        break;
+      default:
+        debugPrint("Unknown error.");
+        debugPrint(e.code);
+    }
+  }
   runApp(const MyApp());
 }
 
@@ -36,7 +59,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Water Quality Download'),
     );
   }
 }
@@ -60,9 +83,15 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-
   bool downloading = false;
-  File? csv;
+  late Future<Uint8List> csv;
+
+  @override
+  void initState() {
+    super.initState();
+
+    csv = downloadCSV();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,51 +102,119 @@ class _MyHomePageState extends State<MyHomePage> {
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: downloading
-              ? SpinKitChasingDots(color: Theme.of(context).colorScheme.primary, size: 50.0,)
-              : Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            TextButton(onPressed: (() async {
-              setState(() {downloading = true;});
-              csv = await downloadCSV();
-              setState(() {downloading = false;});
-            }), child: const Text("Generate CSV")),
-            TextButton(onPressed: (() {
-              csv == null
-                ? debugPrint("Failed")
-                : launchUrl(Uri.parse("data:application/octet-stream;base64,${base64Encode(csv!.readAsBytesSync())}"));
-              }), child: const Text("Download")),
-          ],
+        appBar: AppBar(
+          // TRY THIS: Try changing the color here to a specific color (to
+          // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
+          // change color while the other colors stay the same.
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          // Here we take the value from the MyHomePage object that was created by
+          // the App.build method, and use it to set our appbar title.
+          title: Text(widget.title),
         ),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
+        body: Center(
+            // Center is a layout widget. It takes a single child and positions it
+            // in the middle of the parent.
+            child: FutureBuilder(
+                future: csv,
+                builder:
+                    (BuildContext context, AsyncSnapshot<Uint8List> snapshot) {
+                  switch (snapshot.connectionState) {
+                    case ConnectionState.none:
+                    case ConnectionState.waiting:
+                      return SpinKitChasingDots(
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 50.0,
+                      );
+                    case ConnectionState.active:
+                    case ConnectionState.done:
+                      if (snapshot.hasError) {
+                        return const Text("Error!");
+                      } else {
+                        return TextButton(
+                            onPressed: (() {
+                              launchUrl(Uri.parse(
+                                  "data:text/csv;base64,${base64Encode(snapshot.data!)}"));
+                            }),
+                            child: const Text("Download"));
+                      }
+                  }
+                })));
   }
-  
-  downloadCSV() async {await Future.delayed(const Duration(seconds: 2), (){});}
+
+  Future<Uint8List> downloadCSV() async {
+    CollectionReference ref =
+        FirebaseFirestore.instance.collection("testInstances");
+
+    QuerySnapshot eventsQuery = await ref.get();
+
+    List<List<dynamic>> data = List.empty(growable: true);
+
+    List<dynamic> row = [];
+    row.add("ID");
+    row.add("Longitude");
+    row.add("Latitude");
+    row.add("DateTime");
+    row.add("WaterType");
+    row.add("WaterInfo");
+    row.add("Notes");
+    row.add("pH");
+    row.add("Hardness");
+    row.add("HydrogenSulfide");
+    row.add("Iron");
+    row.add("Copper");
+    row.add("Lead");
+    row.add("Manganese");
+    row.add("TotalChlorine");
+    row.add("Mercury");
+    row.add("Nitrate");
+    row.add("Nitrite");
+    row.add("Sulfate");
+    row.add("Zinc");
+    row.add("Flouride");
+    row.add("SodiumChloride");
+    row.add("TotalAlkalinity");
+    row.add("ImageLink");
+    data.add(row);
+
+    int count = 0;
+
+    for (var document in eventsQuery.docs) {
+      List<dynamic> row = [];
+      row.add(count);
+      count++;
+      row.add(document["longitude"]);
+      row.add(document["latitude"]);
+      row.add(DateFormat('yyyy/MM/dd HH:mm:ss')
+          .format(DateTime.fromMicrosecondsSinceEpoch(document["timestamp"]))
+          .toString());
+      row.add(document["Water Type"]);
+      (document.data() as Map<String, dynamic>).containsKey('Water Info')
+          ? row.add("Info: " + document["Water Info"])
+          : row.add("None");
+      (document.data() as Map<String, dynamic>).containsKey('Notes')
+          ? row.add("Info: " + document["Notes"])
+          : row.add("None");
+      row.add(document["pH"]);
+      row.add(document["Hardness"]);
+      row.add(document["Hydrogen Sulfide"]);
+      row.add(document["Iron"]);
+      row.add(document["Copper"]);
+      row.add(document["Lead"]);
+      row.add(document["Manganese"]);
+      row.add(document["Total Chlorine"]);
+      row.add(document["Mercury"]);
+      row.add(document["Nitrate"]);
+      row.add(document["Nitrite"]);
+      row.add(document["Sulfate"]);
+      row.add(document["Zinc"]);
+      row.add(document["Flouride"]);
+      row.add(document["Sodium Chloride"]);
+      row.add(document["Total Alkalinity"]);
+      row.add(document["image"]);
+      data.add(row);
+    }
+
+    return Uint8List.fromList(
+        utf8.encode(const ListToCsvConverter().convert(data)));
+  }
 }
